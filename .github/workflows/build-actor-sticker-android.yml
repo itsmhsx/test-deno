@@ -1,8 +1,8 @@
-name: Build Actor Sticker Android APK
+name: Build Actor Sticker Android APK v0.2
 
 on:
   push:
-    branches: [ actor-sticker-android-apk-v0.1 ]
+    branches: [ actor-sticker-android-apk-v0.2 ]
   workflow_dispatch:
 
 jobs:
@@ -25,16 +25,18 @@ jobs:
           gradle-version: '8.9'
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
-      - name: Verify APK
+      - name: Verify APK structure and signature
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          BT="$ANDROID_HOME/build-tools/35.0.0"
-          test -s "$APK"
-          "$BT/apksigner" verify --verbose "$APK"
-          "$BT/zipalign" -c -v 4 "$APK"
-          "$BT/aapt" dump badging "$APK" | tee apk-badging.txt
-          sha256sum "$APK" | tee apk-sha256.txt
-          unzip -t "$APK" | tail -n 5
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee apk-badging.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 8
+          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | grep -q android.permission.INTERNET; then
+            echo "Unexpected INTERNET permission"
+            exit 1
+          fi
       - name: Emulator install and launch smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -46,23 +48,25 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: |
             set -e
-            APK=app/build/outputs/apk/debug/app-debug.apk
             adb logcat -c
-            adb install -r "$APK" | tee emulator-install.txt
+            adb install -r app/build/outputs/apk/debug/app-debug.apk | tee emulator-install.txt
+            grep -q Success emulator-install.txt
+            adb shell pm list packages | grep -q com.mhsx.actorsticker
             adb shell am force-stop com.mhsx.actorsticker || true
             adb shell am start -W -n com.mhsx.actorsticker/.MainActivity | tee emulator-launch.txt
-            sleep 5
+            sleep 8
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
-            adb logcat -d -t 500 > emulator-logcat.txt
-            if grep -E "FATAL EXCEPTION|Process: com\.mhsx\.actorsticker" emulator-logcat.txt; then
+            adb shell dumpsys activity activities | grep -q com.mhsx.actorsticker
+            adb logcat -d -t 1000 > emulator-logcat.txt
+            if grep -E "FATAL EXCEPTION|Process: com\.mhsx\.actorsticker.*has died|AndroidRuntime.*com\.mhsx\.actorsticker" emulator-logcat.txt; then
               echo "App crash detected in logcat"
               exit 1
             fi
-            echo "Emulator smoke test passed"
+            echo "Emulator install/launch smoke test passed"
       - uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.1.0-APK-tested
+          name: ActorStickerCutterAndroid-v0.2.0-APK-tested
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
