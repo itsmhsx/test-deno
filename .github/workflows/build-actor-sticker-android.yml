@@ -1,0 +1,46 @@
+name: Build Actor Sticker Android APK
+
+on:
+  push:
+    branches: [ actor-sticker-android-apk-v0.1 ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Verify APK
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$APK"
+          "$BT/apksigner" verify --verbose "$APK"
+          "$BT/zipalign" -c -v 4 "$APK"
+          "$BT/aapt" dump badging "$APK" | tee apk-badging.txt
+          sha256sum "$APK" | tee apk-sha256.txt
+          unzip -t "$APK" | tail -n 5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ActorStickerCutterAndroid-v0.1.0-APK
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 7
