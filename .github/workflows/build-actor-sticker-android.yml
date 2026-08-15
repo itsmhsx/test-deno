@@ -47,23 +47,21 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: |
-            set -e
             adb logcat -c
             adb install -r app/build/outputs/apk/debug/app-debug.apk | tee emulator-install.txt
             grep -q Success emulator-install.txt
             adb shell pm list packages | grep -q com.mhsx.actorsticker
-            adb shell am force-stop com.mhsx.actorsticker || true
-            adb shell am start -W -n com.mhsx.actorsticker/.MainActivity | tee emulator-launch.txt
-            sleep 8
+            adb shell am force-stop com.mhsx.actorsticker
+            adb shell am start -n com.mhsx.actorsticker/.MainActivity | tee emulator-launch.txt
+            sleep 10
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
             adb shell dumpsys activity activities | grep -q com.mhsx.actorsticker
-            adb logcat -d -t 1000 > emulator-logcat.txt
-            if grep -E "FATAL EXCEPTION|Process: com\.mhsx\.actorsticker.*has died|AndroidRuntime.*com\.mhsx\.actorsticker" emulator-logcat.txt; then
-              echo "App crash detected in logcat"
-              exit 1
-            fi
-            echo "Emulator install/launch smoke test passed"
+            adb exec-out screencap -p > emulator-screen.png
+            test -s emulator-screen.png
+            adb logcat -d -t 1200 > emulator-logcat.txt
+            ! grep -E "FATAL EXCEPTION|Process: com\.mhsx\.actorsticker.*has died|AndroidRuntime.*FATAL" emulator-logcat.txt
+            echo "Emulator install/launch smoke test passed" | tee emulator-result.txt
       - uses: actions/upload-artifact@v4
         with:
           name: ActorStickerCutterAndroid-v0.2.0-APK-tested
@@ -75,5 +73,7 @@ jobs:
             emulator-launch.txt
             emulator-pid.txt
             emulator-logcat.txt
+            emulator-screen.png
+            emulator-result.txt
           if-no-files-found: error
           retention-days: 7
