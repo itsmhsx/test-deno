@@ -31,9 +31,10 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | tee apk-permissions.txt
           sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
           unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 8
-          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | grep -q android.permission.INTERNET; then
+          if grep -q android.permission.INTERNET apk-permissions.txt; then
             echo "Unexpected INTERNET permission"
             exit 1
           fi
@@ -47,13 +48,18 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: |
+            adb wait-for-device
+            sleep 20
+            adb shell getprop sys.boot_completed | tee emulator-boot.txt
+            adb shell service check package | tee emulator-package-service.txt
             adb logcat -c
-            adb install -r app/build/outputs/apk/debug/app-debug.apk | tee emulator-install.txt
+            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker.apk | tee emulator-push.txt
+            adb shell pm install -r /data/local/tmp/actor-sticker.apk | tee emulator-install.txt || (sleep 20 && adb shell pm install -r /data/local/tmp/actor-sticker.apk | tee emulator-install.txt)
             grep -q Success emulator-install.txt
             adb shell pm list packages | grep -q com.mhsx.actorsticker
             adb shell am force-stop com.mhsx.actorsticker
             adb shell am start -n com.mhsx.actorsticker/.MainActivity | tee emulator-launch.txt
-            sleep 10
+            sleep 12
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
             adb shell dumpsys activity activities | grep -q com.mhsx.actorsticker
@@ -63,12 +69,17 @@ jobs:
             ! grep -E "FATAL EXCEPTION|Process: com\.mhsx\.actorsticker.*has died|AndroidRuntime.*FATAL" emulator-logcat.txt
             echo "Emulator install/launch smoke test passed" | tee emulator-result.txt
       - uses: actions/upload-artifact@v4
+        if: always() && !cancelled()
         with:
           name: ActorStickerCutterAndroid-v0.2.0-APK-tested
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
+            apk-permissions.txt
             apk-sha256.txt
+            emulator-boot.txt
+            emulator-package-service.txt
+            emulator-push.txt
             emulator-install.txt
             emulator-launch.txt
             emulator-pid.txt
