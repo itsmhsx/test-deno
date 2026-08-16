@@ -22,13 +22,16 @@ if old not in s:
 s = s.replace(old, new, 1)
 main.write_text(s)
 
-# Performance export integrations are applied after the v0.5/v0.6 patch has expanded MainActivityV040.
+# Performance export integrations are applied after v0.5/v0.6/v0.6.1 patches.
 v40 = Path('app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java')
 s = v40.read_text()
-if 'if (p.getBoolean("dense_tracking_v060", true)) {' in s:
+old061 = '''                        String motion061 = p.getString("tracking_motion_v061", "Slow");\n                        if (p.getBoolean("dense_tracking_v060", true) && !motion061.startsWith("Fixed") && !"Manual fixed".equals(motion061)) {'''
+if old061 in s:
+    s = s.replace(old061, '''                        String motion061 = p.getString("tracking_motion_v061", "Slow");\n                        if (V070ExportPolicy.shouldDenseTrack(p)) {''', 1)
+elif 'if (p.getBoolean("dense_tracking_v060", true)) {' in s:
     s = s.replace('if (p.getBoolean("dense_tracking_v060", true)) {', 'if (V070ExportPolicy.shouldDenseTrack(p)) {', 1)
 else:
-    raise SystemExit('dense tracking guard missing after v0.6 patch')
+    raise SystemExit('dense tracking guard missing after v0.6.1 patch')
 
 builder = '                Transformer.Builder builder = new Transformer.Builder(this);\n'
 if builder not in s:
@@ -46,7 +49,7 @@ s = s.replace(end, '''        if (!out.isFile() || out.length() == 0) throw new 
 v40.write_text(s)
 
 # Two-pass mode can be disabled for a full accurate single pass. Media3 FrameExtractor remains
-# the v0.7 frame engine in both modes (no misleading legacy toggle in UI).
+# the v0.7 frame engine in both modes.
 scan = Path('app/src/main/java/com/mhsx/actorsticker/V070Scanner.java')
 s = scan.read_text()
 old = '''                    TreeSet<Long> candidates = new TreeSet<>();\n                    double faceRatioSum=0; int faceRatioCount=0;\n                    float coarseMin = prefs.getFloat("min_face_v070", 0.065f);\n                    try (V070QuickFaceDetector quick = new V070QuickFaceDetector(coarseMin);'''
@@ -66,7 +69,7 @@ s = ui.read_text()
 s = s.replace('        addToggle(box,"frame_extractor_v070",tr("Media3 FrameExtractor 1.10 fast sampling"),true);\n', '')
 ui.write_text(s)
 
-# v0.6.1 compatibility patch may have touched version fields in older branches; force v0.7 last.
+# Force v0.7 version after legacy compatibility patches.
 gradle = Path('app/build.gradle')
 s = gradle.read_text()
 s = re.sub(r"versionCode\s+\d+", "versionCode 9", s, count=1)
