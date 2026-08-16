@@ -43,21 +43,24 @@ final class TrackingPanEffect implements MatrixTransformation {
         Matrix matrix = new Matrix();
         if (hits.isEmpty()) return matrix;
 
-        long globalMs = segmentStartMs + Math.max(0L, presentationTimeUs / 1000L);
+        long presentedMs = Math.max(0L, presentationTimeUs / 1000L);
+        long relativeCandidate = segmentStartMs + presentedMs;
+        long absoluteCandidate = presentedMs;
+        long globalMs = nearestHitDistance(relativeCandidate) <= nearestHitDistance(absoluteCandidate)
+                ? relativeCandidate : absoluteCandidate;
+
         float[] center = tracking ? smoothCenter(globalMs) : wholeSegmentCenter();
         float cx = center[0];
         float cy = center[1];
 
         if (inputAspect > targetAspect + 0.001f) {
-            // Horizontal crop: move actor toward the center of the square/portrait window.
             float visibleWidthFraction = targetAspect / inputAspect;
             float maxShift = Math.max(0f, 1f - visibleWidthFraction);
             float error = cx - 0.5f;
-            if (Math.abs(error) < 0.035f) error = 0f; // anti-jitter dead zone
+            if (Math.abs(error) < 0.035f) error = 0f;
             float dx = clamp(-2f * error, -maxShift, maxShift);
             matrix.postTranslate(dx, 0f);
         } else if (inputAspect < targetAspect - 0.001f) {
-            // Vertical crop. Put the face a little above visual center to preserve head room.
             float visibleHeightFraction = inputAspect / targetAspect;
             float maxShift = Math.max(0f, 1f - visibleHeightFraction);
             float targetY = safeZone ? 0.42f : 0.50f;
@@ -69,9 +72,17 @@ final class TrackingPanEffect implements MatrixTransformation {
         return matrix;
     }
 
+    private long nearestHitDistance(long timeMs) {
+        long best = Long.MAX_VALUE;
+        for (ActorScanStore.Hit h : hits) {
+            long d = Math.abs(h.t - timeMs);
+            if (d < best) best = d;
+            if (h.t > timeMs && d > best) break;
+        }
+        return best;
+    }
+
     private float[] smoothCenter(long globalMs) {
-        // Gaussian-like temporal voting over nearby detections. This is stateless,
-        // deterministic and removes the jumpy single-frame behavior of v0.3.
         double sx = 0, sy = 0, sw = 0;
         final long radius = 2200L;
         for (ActorScanStore.Hit h : hits) {
@@ -86,7 +97,6 @@ final class TrackingPanEffect implements MatrixTransformation {
         }
         if (sw > 1e-6) return new float[]{(float) (sx / sw), (float) (sy / sw)};
 
-        // No hit inside the smoothing window: interpolate nearest neighbors.
         ActorScanStore.Hit before = null, after = null;
         for (ActorScanStore.Hit h : hits) {
             if (h.t <= globalMs) before = h;
@@ -96,7 +106,6 @@ final class TrackingPanEffect implements MatrixTransformation {
         if (after == null) after = hits.get(hits.size() - 1);
         if (before == after || after.t <= before.t) return new float[]{before.cx, before.cy};
         float p = clamp((globalMs - before.t) / (float) (after.t - before.t), 0f, 1f);
-        // Smoothstep interpolation makes camera motion ease in/out between detections.
         p = p * p * (3f - 2f * p);
         return new float[]{lerp(before.cx, after.cx, p), lerp(before.cy, after.cy, p)};
     }
