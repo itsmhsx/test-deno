@@ -25,8 +25,22 @@ final class V080StudioStore {
     synchronized int feedbackCount(String key,int actorId,String type){JSONObject f=loadRoot().optJSONObject("feedback");return f==null?0:f.optInt(key+":"+actorId+":"+type,0);}
 
     synchronized String suggestions(String key,ActorScanStore.ScanState s,long cacheBytes,String codec){
-        if(s==null)return"Run Actor Scan to unlock project suggestions.";ArrayList<ActorScanStore.Cluster> xs=new ArrayList<>(s.clusters);xs.sort((a,b)->Double.compare(b.smartScore(),a.smartScore()));StringBuilder b=new StringBuilder();if(!xs.isEmpty()){ActorScanStore.Cluster top=xs.get(0);b.append("• ").append(actorName(key,top.id)).append(" has the strongest screen presence (\").append(top.count).append(" detections).\n");int high=0;for(ActorScanStore.Hit h:top.hits)if(h.quality>=.70f)high++;b.append("• ").append(high).append(" high-quality actor hits are ready for ranking.\n");}
-        int weak=0;for(ActorScanStore.Cluster c:xs)if(c.count<3)weak++;if(weak>0)b.append("• ").append(weak).append(" tiny face group(s) may be noise; Merge/Split review is recommended.\n");b.append(String.format(Locale.US,"• Private actor cache: %.1f MB.\n",cacheBytes/1048576.0));b.append("• Recommended codec: ").append(codec==null?"Auto":codec).append(".\n");b.append("• Stable crop preset keeps dynamic zoom off unless you explicitly enable it.");return b.toString();
+        if(s==null)return "Run Actor Scan to unlock project suggestions.";
+        ArrayList<ActorScanStore.Cluster> xs=new ArrayList<>(s.clusters);
+        xs.sort((a,b)->Double.compare(b.smartScore(),a.smartScore()));
+        StringBuilder b=new StringBuilder();
+        if(!xs.isEmpty()){
+            ActorScanStore.Cluster top=xs.get(0);
+            b.append("• ").append(actorName(key,top.id)).append(" has the strongest screen presence (").append(top.count).append(" detections).\n");
+            int high=0;for(ActorScanStore.Hit h:top.hits)if(h.quality>=.70f)high++;
+            b.append("• ").append(high).append(" high-quality actor hits are ready for ranking.\n");
+        }
+        int weak=0;for(ActorScanStore.Cluster c:xs)if(c.count<3)weak++;
+        if(weak>0)b.append("• ").append(weak).append(" tiny face group(s) may be noise; Merge/Split review is recommended.\n");
+        b.append(String.format(Locale.US,"• Private actor cache: %.1f MB.\n",cacheBytes/1048576.0));
+        b.append("• Recommended codec: ").append(codec==null?"Auto":codec).append(".\n");
+        b.append("• Stable crop preset keeps dynamic zoom off unless you explicitly enable it.");
+        return b.toString();
     }
 
     static long bytes(File f){if(f==null||!f.exists())return 0;if(f.isFile())return f.length();long n=0;File[]a=f.listFiles();if(a!=null)for(File x:a)n+=bytes(x);return n;}
