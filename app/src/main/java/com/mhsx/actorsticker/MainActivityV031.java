@@ -15,19 +15,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
 
-/**
- * v0.3.1 launcher/fix layer.
- *
- * v0.3.0 intentionally separated navigation from execution, but that made the
- * Scan Actors buttons look like they did nothing: the first tap only opened the
- * scan page and a second tap on Start / Resume Scan was required. This launcher
- * keeps the tested v0.3 scan/export engine intact and rewires the obvious Scan
- * entry points so one tap both opens the scan page and starts/resumes scanning.
- *
- * It also provides immediate visible feedback before the worker has decoded its
- * first frame, which is important on long phone videos where MediaMetadataRetriever
- * may take several seconds to seek the first frame.
- */
+/** v0.3.1 scan-start and live-progress compatibility layer. */
 public class MainActivityV031 extends MainActivity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Set<View> wired = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -37,15 +25,13 @@ public class MainActivityV031 extends MainActivity {
         @Override public void run() {
             if (destroyed) return;
             try { wireScanButtons(getWindow().getDecorView()); } catch (Throwable ignored) {}
+            try { refreshLiveScanStatus(); } catch (Throwable ignored) {}
             ui.postDelayed(this, 700);
         }
     };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-
-        // Better discovery defaults for a phone, but never overwrite a user's
-        // existing choices.
         try {
             if (!getSharedPreferences("actor_sticker", MODE_PRIVATE).contains("sample_ms")) {
                 getSharedPreferences("actor_sticker", MODE_PRIVATE).edit()
@@ -83,32 +69,25 @@ public class MainActivityV031 extends MainActivity {
 
     private void openAndStartScan() {
         try {
-            // Open the status page first so the user immediately sees the
-            // progress bar/status area instead of wondering if the tap worked.
             Method show = MainActivity.class.getDeclaredMethod("showScan");
             show.setAccessible(true);
             show.invoke(this);
         } catch (Throwable ignored) {}
 
-        setBaseStatus("Starting actor scan… please wait for the first frame");
+        setBaseStatus("Starting actor scan… preparing video decoder");
         Toast.makeText(this, "Actor Scan started", Toast.LENGTH_SHORT).show();
 
         ui.postDelayed(() -> {
             try {
                 Field running = MainActivity.class.getDeclaredField("running");
                 running.setAccessible(true);
-                boolean isRunning = running.getBoolean(this);
-                if (isRunning) {
+                if (running.getBoolean(this)) {
                     Toast.makeText(this, "Scan is already running", Toast.LENGTH_SHORT).show();
                     return;
                 }
-
                 Method start = MainActivity.class.getDeclaredMethod("startActorScan", boolean.class);
                 start.setAccessible(true);
                 start.invoke(this, false);
-
-                // The original screen can be rebuilt by cache loading; rewire any
-                // newly-created Scan button immediately.
                 ui.postDelayed(() -> {
                     try { wireScanButtons(getWindow().getDecorView()); } catch (Throwable ignored) {}
                 }, 250);
@@ -119,14 +98,43 @@ public class MainActivityV031 extends MainActivity {
         }, 120);
     }
 
+    private void refreshLiveScanStatus() throws Exception {
+        Field runningField = MainActivity.class.getDeclaredField("running");
+        runningField.setAccessible(true);
+        if (!runningField.getBoolean(this)) return;
+
+        Field pageField = MainActivity.class.getDeclaredField("currentPage");
+        pageField.setAccessible(true);
+        Object page = pageField.get(this);
+        if (!"scan".equals(String.valueOf(page))) return;
+
+        Field stateField = MainActivity.class.getDeclaredField("scanState");
+        stateField.setAccessible(true);
+        Object obj = stateField.get(this);
+        if (!(obj instanceof ActorScanStore.ScanState)) {
+            setBaseStatus("Actor Scan running • preparing index / first frame…");
+            return;
+        }
+
+        ActorScanStore.ScanState s = (ActorScanStore.ScanState) obj;
+        int videoNo = Math.max(1, s.videoIndex + 1);
+        int stable = 0;
+        int detections = 0;
+        for (ActorScanStore.Cluster c : s.clusters) {
+            detections += c.count;
+            if (c.count >= 2) stable++;
+        }
+        setBaseStatus("Actor Scan RUNNING • video " + videoNo + " • " +
+                String.format(java.util.Locale.US, "%.1fs", s.nextMs / 1000f) +
+                " • faces " + detections + " • groups " + stable);
+    }
+
     private void setBaseStatus(String text) {
         try {
             Field f = MainActivity.class.getDeclaredField("statusBar");
             f.setAccessible(true);
             Object o = f.get(this);
-            if (o instanceof android.widget.TextView) {
-                ((android.widget.TextView) o).setText(text);
-            }
+            if (o instanceof android.widget.TextView) ((android.widget.TextView) o).setText(text);
         } catch (Throwable ignored) {}
     }
 
