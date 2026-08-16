@@ -5,8 +5,8 @@ import java.util.*;
 
 @Dao
 abstract class V090JobDao {
-    @Query("SELECT * FROM render_jobs ORDER BY createdAt ASC, rowid ASC") abstract List<V090JobEntity> all();
-    @Query("SELECT * FROM render_jobs WHERE state=:state ORDER BY createdAt ASC, rowid ASC LIMIT 1") abstract V090JobEntity firstByState(String state);
+    @Query("SELECT * FROM render_jobs ORDER BY createdAt ASC, id ASC") abstract List<V090JobEntity> all();
+    @Query("SELECT * FROM render_jobs WHERE state=:state ORDER BY createdAt ASC, id ASC LIMIT 1") abstract V090JobEntity firstByState(String state);
     @Query("SELECT * FROM render_jobs WHERE id=:id LIMIT 1") abstract V090JobEntity byId(String id);
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract void upsert(V090JobEntity e);
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract void upsertAll(List<V090JobEntity> e);
