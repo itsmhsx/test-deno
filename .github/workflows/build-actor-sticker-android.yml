@@ -39,7 +39,8 @@ jobs:
       - name: Static v0.4 guards
         run: |
           grep -q "versionName '0.4.0'" app/build.gradle
-          grep -q 'MainActivityV040' app/src/main/AndroidManifest.xml
+          grep -q 'MainActivityV040Final' app/src/main/AndroidManifest.xml
+          grep -q 'App version: 0.4.0' app/src/main/java/com/mhsx/actorsticker/MainActivityV040Final.java
           grep -q 'clip_seconds' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
           grep -q 'Smart face-following pan' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
           grep -q 'int bitrate = 28_000_000' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
@@ -59,14 +60,15 @@ jobs:
           sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
           unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 10
           grep -q "versionName='0.4.0'" apk-badging.txt
+          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV040Final'" apk-badging.txt
           if grep -q android.permission.INTERNET apk-permissions.txt; then
             echo "Unexpected INTERNET permission"
             exit 1
           fi
-      - name: Upload verified v0.4 APK
+      - name: Upload verified v0.4 final APK
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.4.0-SmartTracking-MaxQuality-APK-verified
+          name: ActorStickerCutterAndroid-v0.4.0-FINAL-SmartTracking-MaxQuality
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
@@ -93,7 +95,7 @@ jobs:
             adb shell pm install -r /data/local/tmp/actor-sticker.apk | tee emulator-install.txt
             grep -q Success emulator-install.txt
             adb shell am force-stop com.mhsx.actorsticker
-            adb shell am start -n com.mhsx.actorsticker/.MainActivityV040 | tee emulator-launch.txt
+            adb shell am start -n com.mhsx.actorsticker/.MainActivityV040Final | tee emulator-launch.txt
             sleep 10
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
@@ -106,7 +108,7 @@ jobs:
         if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.4.0-emulator-evidence
+          name: ActorStickerCutterAndroid-v0.4.0-FINAL-emulator-evidence
           path: |
             emulator-push.txt
             emulator-install.txt
