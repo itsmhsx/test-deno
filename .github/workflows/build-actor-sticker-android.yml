@@ -1,8 +1,8 @@
-name: Build Actor Sticker Android APK v0.3
+name: Build Actor Sticker Android APK v0.3.1
 
 on:
   push:
-    branches: [ actor-sticker-android-apk-v0.3 ]
+    branches: [ actor-sticker-android-apk-v0.3.1 ]
   workflow_dispatch:
 
 jobs:
@@ -23,15 +23,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Static parity guards
+      - name: Static scan-fix guards
         run: |
-          grep -q "versionName '0.3.0'" app/build.gradle
+          grep -q "versionName '0.3.1'" app/build.gradle
           grep -q 'MIN_CLIP_MS = 2000L' app/src/main/java/com/mhsx/actorsticker/MainActivity.java
           grep -q 'createSquareCrop' app/src/main/java/com/mhsx/actorsticker/MainActivity.java
-          grep -q 'Scan first' app/src/main/java/com/mhsx/actorsticker/MainActivity.java
           grep -q 'actor_cache' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
-          grep -q 'selectedClusterId' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
-          grep -q 'Resume Scan' app/src/main/java/com/mhsx/actorsticker/MainActivity.java
+          grep -q 'MainActivityV031' app/src/main/AndroidManifest.xml
+          grep -q 'Scan Actors NOW' app/src/main/java/com/mhsx/actorsticker/MainActivityV031.java
+          grep -q 'startActorScan' app/src/main/java/com/mhsx/actorsticker/MainActivityV031.java
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - name: Verify APK structure signature and permissions
@@ -43,15 +43,15 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | tee apk-permissions.txt
           sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
           unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 10
-          grep -q "versionName='0.3.0'" apk-badging.txt
+          grep -q "versionName='0.3.1'" apk-badging.txt
           if grep -q android.permission.INTERNET apk-permissions.txt; then
             echo "Unexpected INTERNET permission"
             exit 1
           fi
-      - name: Upload verified v0.3 APK
+      - name: Upload verified v0.3.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.3.0-APK-verified
+          name: ActorStickerCutterAndroid-v0.3.1-ScanFix-APK-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
@@ -73,13 +73,12 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: |
             adb wait-for-device
-            adb shell getprop sys.boot_completed | tee emulator-boot.txt
             adb logcat -c
             adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker.apk | tee emulator-push.txt
             adb shell pm install -r /data/local/tmp/actor-sticker.apk | tee emulator-install.txt
             grep -q Success emulator-install.txt
             adb shell am force-stop com.mhsx.actorsticker
-            adb shell am start -n com.mhsx.actorsticker/.MainActivity | tee emulator-launch.txt
+            adb shell am start -n com.mhsx.actorsticker/.MainActivityV031 | tee emulator-launch.txt
             sleep 10
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
@@ -92,9 +91,8 @@ jobs:
         if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.3.0-emulator-evidence
+          name: ActorStickerCutterAndroid-v0.3.1-emulator-evidence
           path: |
-            emulator-boot.txt
             emulator-push.txt
             emulator-install.txt
             emulator-launch.txt
