@@ -106,6 +106,40 @@ if old not in s:
     raise SystemExit('segment loop pattern missing')
 s = s.replace(old, new, 1)
 
+# v0.6: optionally keep only the best-ranked candidates for each video.
+needle = '''if (duplicateFilter) segments = removeOverlaps(segments);
+                    HashSet<Long> visualHashes050 = new HashSet<>();'''
+replacement = '''if (duplicateFilter) segments = removeOverlaps(segments);
+                    if (p.getBoolean("best_only_v060", false) && segments.size() > p.getInt("best_top_n_v060", 20)) {
+                        ArrayList<ProSegment> ranked060 = new ArrayList<>(segments);
+                        ranked060.sort((x,y) -> Float.compare(y.quality, x.quality));
+                        int keep060 = Math.max(1, Math.min(ranked060.size(), p.getInt("best_top_n_v060", 20)));
+                        ranked060 = new ArrayList<>(ranked060.subList(0, keep060));
+                        ranked060.sort(Comparator.comparingLong(x -> x.startMs));
+                        segments = ranked060;
+                    }
+                    HashSet<Long> visualHashes050 = new HashSet<>();'''
+if needle not in s:
+    raise SystemExit('v0.6 best-only insertion point missing')
+s = s.replace(needle, replacement, 1)
+
+# v0.6: moment filtering + dense identity-locked tracking pass before final render.
+needle = '                        if (hash050 != Long.MIN_VALUE) visualHashes050.add(hash050);'
+replacement = '''                        if (hash050 != Long.MIN_VALUE) visualHashes050.add(hash050);
+                        String moment060 = p.getString("moment_filter_v060", "All");
+                        if (!V060MomentClassifier.accept(s.hits, moment060)) {
+                            report.add("SKIP " + moment060 + " filter " + displayName(video) + " @" + s.startMs);
+                            continue;
+                        }
+                        if (p.getBoolean("dense_tracking_v060", true)) {
+                            p.edit().putInt("v060_track_progress", 0).putString("v060_track_status", "Dense face tracking 0%").apply();
+                            List<ActorScanStore.Hit> dense060 = V060TrackRefiner.refine(this, video, vi, s.startMs, s.endMs, a.actor, s.hits, p);
+                            if (dense060 != null && dense060.size() >= 2) s = new ProSegment(s.startMs, s.endMs, dense060, s.quality);
+                        }'''
+if needle not in s:
+    raise SystemExit('v0.6 dense tracking insertion point missing')
+s = s.replace(needle, replacement, 1)
+
 old = '''if (s.endMs - s.startMs < MIN_CLIP_MS) continue;
                         if (s.endMs - s.startMs > clipSec * 1000L + 25) {'''
 new = '''if (s.endMs - s.startMs < MIN_CLIP_MS) continue;
@@ -122,7 +156,7 @@ if old not in s:
     raise SystemExit('duration guard pattern missing')
 s = s.replace(old, new, 1)
 
-s = s.replace('.setTitle("v0.4 Export result")', '.setTitle("v0.5 Export result")')
+s = s.replace('.setTitle("v0.4 Export result")', '.setTitle("v0.6 Export result")')
 p.write_text(s)
 
 # MainActivity inherits Activity.setProgress(int), so a private helper with the
@@ -134,4 +168,48 @@ s50 = s50.replace('setProgress(', 'setJobProgress050(')
 s50 = s50.replace('((ProgressBar)f.get(this)).setJobProgress050(', '((ProgressBar)f.get(this)).setProgress(')
 p50.write_text(s50)
 
-print('v0.5 export + compile compatibility patch applied')
+# Enable eye landmarks for v0.6 alignment and use the aligned descriptor in the
+# activity scanner as well as the foreground background scanner.
+face = Path('app/src/main/java/com/mhsx/actorsticker/FaceEngine.java')
+fs = face.read_text().replace('FaceDetectorOptions.LANDMARK_MODE_NONE', 'FaceDetectorOptions.LANDMARK_MODE_ALL')
+face.write_text(fs)
+
+main = Path('app/src/main/java/com/mhsx/actorsticker/MainActivity.java')
+ms = main.read_text()
+ms = ms.replace('float[] d = engine.descriptor(frame, box);', 'float[] d = V060AlignedDescriptor.descriptor(engine, frame, f);')
+main.write_text(ms)
+
+bg = Path('app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java')
+bs = bg.read_text()
+bs = bs.replace('float[] descriptor = engine.descriptor(frame, box);', 'float[] descriptor = V060AlignedDescriptor.descriptor(engine, frame, face);')
+loop_old = 'for (long t = begin; t < duration && !cancel.get(); t += s.sampleMs) {'
+loop_new = '''long adaptiveStep060 = s.sampleMs;
+                        for (long t = begin; t < duration && !cancel.get(); t += adaptiveStep060) {
+                            int hitsBefore060 = totalHits060(s);'''
+if loop_old not in bs:
+    raise SystemExit('background smart sampler loop missing')
+bs = bs.replace(loop_old, loop_new, 1)
+next_old = 's.nextMs = Math.min(duration, t + s.sampleMs);'
+next_new = '''boolean faceSeen060 = totalHits060(s) > hitsBefore060;
+                            adaptiveStep060 = prefs.getBoolean("smart_sampler_v060", true)
+                                    ? (faceSeen060 ? Math.max(300L, s.sampleMs / 2L) : Math.min(3500L, s.sampleMs * 2L))
+                                    : s.sampleMs;
+                            s.nextMs = Math.min(duration, t + adaptiveStep060);'''
+if next_old not in bs:
+    raise SystemExit('background smart sampler checkpoint missing')
+bs = bs.replace(next_old, next_new, 1)
+bs = bs.replace('(t + s.sampleMs) / (double) duration', '(t + adaptiveStep060) / (double) duration', 1)
+helper_point = '    private int nextClusterId(ActorScanStore.ScanState s) {'
+helper = '''    private int totalHits060(ActorScanStore.ScanState s) {
+        int n = 0;
+        for (ActorScanStore.Cluster c : s.clusters) n += c.hits.size();
+        return n;
+    }
+
+'''
+if helper_point not in bs:
+    raise SystemExit('background helper insertion point missing')
+bs = bs.replace(helper_point, helper + helper_point, 1)
+bg.write_text(bs)
+
+print('v0.6 export, alignment, dense tracking and smart sampler patch applied')
