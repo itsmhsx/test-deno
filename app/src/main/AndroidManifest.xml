@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
 
     <application
+        android:name=".V080App"
         android:allowBackup="true"
         android:label="Actor Sticker Cutter"
         android:icon="@drawable/ic_actor_sticker"
@@ -14,7 +15,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
-            android:name=".MainActivityV070"
+            android:name=".MainActivityV080"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="unspecified">
@@ -23,6 +24,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".MainActivityV070" android:exported="false" />
         <activity android:name=".MainActivityV060" android:exported="false" />
         <activity android:name=".MainActivityV050" android:exported="false" />
         <activity android:name=".MainActivityV040Final" android:exported="false" />
@@ -33,6 +35,10 @@
             android:screenOrientation="unspecified" />
         <service
             android:name=".BackgroundScanService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing" />
+        <service
+            android:name=".V080ExportService"
             android:exported="false"
             android:foregroundServiceType="mediaProcessing" />
     </application>
