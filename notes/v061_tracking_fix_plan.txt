@@ -1,0 +1,8 @@
+Actor Sticker Cutter Android v0.6.1 tracking stability hotfix
+- fixed/no-follow camera mode
+- very slow/slow/normal/custom follow modes
+- manual fixed X/Y framing
+- adjustable follow strength and dead-zone
+- dynamic zoom defaults off for stable framing
+- deterministic wide-window smoothing to prevent left/right hunting
+- dense tracking skipped when camera is fixed
