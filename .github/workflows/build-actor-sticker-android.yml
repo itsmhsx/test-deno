@@ -23,15 +23,28 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Apply Max Quality build policy
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java')
+          s = p.read_text()
+          old = '''int shortSide = Math.max(360, Math.min(s.sourceWidth(), s.sourceHeight()));\n                    int bitrate = recommendedBitrate(shortSide);'''
+          new = '''// Max Quality: request a high VBR-compatible bitrate first.\n                    // If a device encoder rejects it, exportTracked automatically retries with Media3 defaults.\n                    int bitrate = 28_000_000;'''
+          if old not in s:
+              raise SystemExit('Max Quality source pattern not found')
+          p.write_text(s.replace(old, new))
+          PY
+          grep -q 'int bitrate = 28_000_000' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
       - name: Static v0.4 guards
         run: |
           grep -q "versionName '0.4.0'" app/build.gradle
           grep -q 'MainActivityV040' app/src/main/AndroidManifest.xml
           grep -q 'clip_seconds' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
           grep -q 'Smart face-following pan' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'recommendedBitrate' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'int bitrate = 28_000_000' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
           grep -q 'TrackingPanEffect' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'getMatrix' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
+          grep -q 'nearestHitDistance' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
           grep -q 'MIN_CLIP_MS = 2000L' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
           grep -q 'actor_cache' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
       - name: Build debug APK
@@ -53,7 +66,7 @@ jobs:
       - name: Upload verified v0.4 APK
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.4.0-SmartTracking-APK-verified
+          name: ActorStickerCutterAndroid-v0.4.0-SmartTracking-MaxQuality-APK-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
