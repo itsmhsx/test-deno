@@ -9,21 +9,28 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * v0.5 timestamp-aware actor camera. It smooths actor centers, rejects obvious
- * identity-switch outliers, predicts short face-loss gaps, and can apply a very
- * conservative dynamic zoom while preserving crop boundaries.
+ * v0.6 timestamp-aware actor camera. It smooths actor centers, rejects obvious
+ * identity-switch outliers, predicts short face-loss gaps, applies conservative
+ * dynamic zoom and supports face-center/rule-of-thirds/look-room composition.
  */
 final class TrackingPanEffect implements MatrixTransformation {
     private static volatile boolean CFG_DYNAMIC_ZOOM = true;
     private static volatile boolean CFG_LOST_RECOVERY = true;
     private static volatile boolean CFG_IDENTITY_LOCK = true;
     private static volatile float CFG_MAX_ZOOM = 1.16f;
+    private static volatile String CFG_COMPOSITION = "Look room";
 
     static void configure(boolean dynamicZoom, boolean lostRecovery, boolean identityLock, float maxZoom) {
         CFG_DYNAMIC_ZOOM = dynamicZoom;
         CFG_LOST_RECOVERY = lostRecovery;
         CFG_IDENTITY_LOCK = identityLock;
         CFG_MAX_ZOOM = clamp(maxZoom, 1.0f, 1.28f);
+    }
+
+    static void configureV060(String composition) {
+        if (composition == null) composition = "Look room";
+        if (!"Face center".equals(composition) && !"Rule of thirds".equals(composition) && !"Look room".equals(composition)) composition = "Look room";
+        CFG_COMPOSITION = composition;
     }
 
     private final ArrayList<ActorScanStore.Hit> hits;
@@ -65,15 +72,16 @@ final class TrackingPanEffect implements MatrixTransformation {
             float stableBonus = nearest <= 700L ? 0.045f : (nearest <= 1300L ? 0.025f : 0f);
             float confidenceBonus = 0.055f * confidence;
             zoom = clamp(1f + stableBonus + confidenceBonus, 1f, CFG_MAX_ZOOM);
-            if (nearest > 1800L) zoom = 1f; // zoom out while the face is genuinely lost
+            if (nearest > 1800L) zoom = 1f;
             matrix.postScale(zoom, zoom);
         }
 
         if (inputAspect > targetAspect + 0.001f) {
             float visibleWidthFraction = targetAspect / inputAspect;
             float maxShift = Math.max(0f, 1f - visibleWidthFraction);
-            float error = cx - 0.5f;
-            if (Math.abs(error) < 0.030f) error = 0f;
+            float targetX = compositionTargetX(globalMs, cx);
+            float error = cx - targetX;
+            if (Math.abs(error) < 0.026f) error = 0f;
             float dx = clamp(-2f * error * zoom, -maxShift * zoom, maxShift * zoom);
             matrix.postTranslate(dx, 0f);
         } else if (inputAspect < targetAspect - 0.001f) {
@@ -88,13 +96,41 @@ final class TrackingPanEffect implements MatrixTransformation {
         return matrix;
     }
 
-    /** Some decoders report clipped presentation time, others retain source-like time. */
+    private float compositionTargetX(long globalMs, float cx) {
+        String mode = CFG_COMPOSITION;
+        if ("Face center".equals(mode)) return 0.5f;
+        if ("Rule of thirds".equals(mode)) {
+            if (cx < 0.44f) return 0.40f;
+            if (cx > 0.56f) return 0.60f;
+            return 0.5f;
+        }
+        // Look-room approximation: use short-term movement direction. A subject
+        // moving right is held slightly left in the crop, leaving room ahead.
+        ActorScanStore.Hit before = null, after = null;
+        for (ActorScanStore.Hit h : hits) {
+            if (h.t <= globalMs) before = h;
+            if (h.t > globalMs) { after = h; break; }
+        }
+        float vx = 0f;
+        if (before != null && after != null && after.t > before.t) vx = (after.cx - before.cx) / (after.t - before.t);
+        else if (before != null) {
+            ActorScanStore.Hit prev = null;
+            for (ActorScanStore.Hit h : hits) {
+                if (h.t >= before.t) break;
+                prev = h;
+            }
+            if (prev != null && before.t > prev.t) vx = (before.cx - prev.cx) / (before.t - prev.t);
+        }
+        if (vx > 0.000015f) return 0.43f;
+        if (vx < -0.000015f) return 0.57f;
+        if (cx < 0.30f) return 0.43f;
+        if (cx > 0.70f) return 0.57f;
+        return 0.5f;
+    }
+
     private long normalizePresentationMs(long presentationTimeUs) {
         long ms = Math.max(0L, presentationTimeUs / 1000L);
-        if (segmentStartMs > 0 && ms >= segmentStartMs - 250L) {
-            // Source-like timestamp: convert to segment-local to avoid adding start twice.
-            return Math.max(0L, ms - segmentStartMs);
-        }
+        if (segmentStartMs > 0 && ms >= segmentStartMs - 250L) return Math.max(0L, ms - segmentStartMs);
         return ms;
     }
 
@@ -132,8 +168,7 @@ final class TrackingPanEffect implements MatrixTransformation {
         if (before == after || after.t <= before.t) return new Center(before.cx, before.cy, confidence(before));
         float p = clamp((globalMs - before.t) / (float) (after.t - before.t), 0f, 1f);
         p = p * p * (3f - 2f * p);
-        return new Center(lerp(before.cx, after.cx, p), lerp(before.cy, after.cy, p),
-                lerp(confidence(before), confidence(after), p));
+        return new Center(lerp(before.cx, after.cx, p), lerp(before.cy, after.cy, p), lerp(confidence(before), confidence(after), p));
     }
 
     private Center predictLostCenter(long globalMs) {
@@ -168,15 +203,8 @@ final class TrackingPanEffect implements MatrixTransformation {
         return dist > 0.48f && confidence < 0.72f;
     }
 
-    private float confidence(ActorScanStore.Hit h) {
-        return clamp(h.quality * 0.65f + h.score * 0.35f, 0f, 1f);
-    }
-
-    private long nearestHitDistance(long t) {
-        long best = Long.MAX_VALUE;
-        for (ActorScanStore.Hit h : hits) best = Math.min(best, Math.abs(h.t - t));
-        return best;
-    }
+    private float confidence(ActorScanStore.Hit h) { return clamp(h.quality * 0.65f + h.score * 0.35f, 0f, 1f); }
+    private long nearestHitDistance(long t) { long best = Long.MAX_VALUE; for (ActorScanStore.Hit h : hits) best = Math.min(best, Math.abs(h.t - t)); return best; }
 
     private Center wholeSegmentCenter() {
         double sx = 0, sy = 0, sw = 0, c = 0;
