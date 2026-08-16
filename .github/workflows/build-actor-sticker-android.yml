@@ -1,8 +1,8 @@
-name: Build Actor Sticker Android APK v0.8
+name: Build Actor Sticker Android APK v0.8.1
 
 on:
   push:
-    branches: [ actor-sticker-android-apk-v0.8 ]
+    branches: [ actor-sticker-android-apk-v0.8.1 ]
   workflow_dispatch:
 
 jobs:
@@ -34,45 +34,36 @@ jobs:
           test "$(stat -c%s app/src/main/assets/models/mobilefacenet.tflite)" -gt 500000
           sha256sum app/src/main/assets/models/mobilefacenet.tflite | tee model-sha256.txt
 
-      - name: Apply v0.8 compatibility intelligence and performance patches
+      - name: Apply v0.8.1 compatibility and reliability patches
         run: |
           python3 tools/patch_v050.py
           python3 tools/patch_v061.py
           python3 tools/patch_v070.py
           python3 tools/patch_v080.py
+          python3 tools/patch_v081.py
           grep -q 'configureMotion' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
           grep -q 'V080FaceEmbedder.embedding' app/src/main/java/com/mhsx/actorsticker/FaceEngine.java
           grep -q 'FORMAT_VERSION = 6' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
           grep -q 'FRAGMENT_FORMAT = 2' app/src/main/java/com/mhsx/actorsticker/V070Scanner.java
-          grep -q 'MainActivityV080.class' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
+          grep -q 'MainActivityV081.class' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
 
-      - name: Static v0.8 feature guards
+      - name: Static v0.8.1 hotfix guards
         run: |
           grep -q "compileSdk 36" app/build.gradle
-          grep -q "versionCode 10" app/build.gradle
-          grep -q "versionName '0.8.0'" app/build.gradle
+          grep -q "versionCode 11" app/build.gradle
+          grep -q "versionName '0.8.1'" app/build.gradle
           grep -q "tensorflow-lite:2.16.1" app/build.gradle
-          grep -q "media3-common:1.10.1" app/build.gradle
-          grep -q 'MainActivityV080' app/src/main/AndroidManifest.xml
+          grep -q 'MainActivityV081' app/src/main/AndroidManifest.xml
+          grep -q 'Safe Gallery v0.8.1' app/src/main/java/com/mhsx/actorsticker/MainActivityV081.java
+          grep -q 'startReliableScan' app/src/main/java/com/mhsx/actorsticker/MainActivityV081.java
+          grep -q 'scanWatchdog' app/src/main/java/com/mhsx/actorsticker/MainActivityV081.java
+          grep -q 'pauseRequested=false' app/src/main/java/com/mhsx/actorsticker/V080ExportService.java
+          grep -q 'kickRequested=true' app/src/main/java/com/mhsx/actorsticker/V080ExportService.java
+          grep -q 'v080_export_heartbeat' app/src/main/java/com/mhsx/actorsticker/V080ExportService.java
+          grep -q 'kickRenderer' app/src/main/java/com/mhsx/actorsticker/V080ExportQueue.java
           grep -q 'V080ExportService' app/src/main/AndroidManifest.xml
           grep -q 'V080App' app/src/main/AndroidManifest.xml
           grep -q 'FOREGROUND_SERVICE_MEDIA_PROCESSING' app/src/main/AndroidManifest.xml
-          grep -q '192' app/src/main/java/com/mhsx/actorsticker/V080FaceEmbedder.java
-          grep -q 'mergeSelected' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'splitSelected' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'v080_multi_mode' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'safe_zone' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'dedupe' app/src/main/java/com/mhsx/actorsticker/V080SceneAnalyzer.java
-          grep -q 'recentProjectKeys' app/src/main/java/com/mhsx/actorsticker/V080StudioStore.java
-          grep -q 'resetInterrupted' app/src/main/java/com/mhsx/actorsticker/V080ExportQueue.java
-          grep -q 'Before / After Preview' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'bestMoment' app/src/main/java/com/mhsx/actorsticker/V080SceneAnalyzer.java
-          grep -q 'momentLabel' app/src/main/java/com/mhsx/actorsticker/V080SceneAnalyzer.java
-          grep -q 'Advanced Actor Gallery' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'Storage Manager' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'Auto Performance Tuner' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'Telegram Sticker Video' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
-          grep -q 'Smart Suggestions' app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java
           test -s app/src/main/baseline-prof.txt
           test -s app/src/main/assets/models/MOBILEFACENET_NOTICE.txt
 
@@ -91,8 +82,8 @@ jobs:
           unzip -l app/build/outputs/apk/debug/app-debug.apk | tee apk-files.txt
           sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
           unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 12
-          grep -q "versionName='0.8.0'" apk-badging.txt
-          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV080'" apk-badging.txt
+          grep -q "versionName='0.8.1'" apk-badging.txt
+          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV081'" apk-badging.txt
           grep -q 'application-icon' apk-badging.txt
           grep -q 'assets/models/mobilefacenet.tflite' apk-files.txt
           grep -q 'assets/models/MOBILEFACENET_NOTICE.txt' apk-files.txt
@@ -100,10 +91,10 @@ jobs:
           if grep -q android.permission.INTERNET apk-permissions.txt; then echo "Unexpected INTERNET permission"; exit 1; fi
           if grep -q android.permission.ACCESS_NETWORK_STATE apk-permissions.txt; then echo "Unexpected network-state permission"; exit 1; fi
 
-      - name: Upload verified v0.8 APK
+      - name: Upload verified v0.8.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.8.0-FullUpgrade-APK-verified
+          name: ActorStickerCutterAndroid-v0.8.1-QueueGalleryHotfix-APK-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
@@ -128,11 +119,11 @@ jobs:
           script: |
             adb wait-for-device
             adb logcat -c
-            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker-v080.apk | tee emulator-push.txt
-            adb shell pm install -r /data/local/tmp/actor-sticker-v080.apk | tee emulator-install.txt
+            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker-v081.apk | tee emulator-push.txt
+            adb shell pm install -r /data/local/tmp/actor-sticker-v081.apk | tee emulator-install.txt
             grep -q Success emulator-install.txt
             adb shell am force-stop com.mhsx.actorsticker
-            adb shell am start -W -n com.mhsx.actorsticker/.MainActivityV080 | tee emulator-launch.txt
+            adb shell am start -W -n com.mhsx.actorsticker/.MainActivityV081 | tee emulator-launch.txt
             sleep 9
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
@@ -146,7 +137,7 @@ jobs:
         if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.8.0-emulator-evidence
+          name: ActorStickerCutterAndroid-v0.8.1-emulator-evidence
           path: |
             emulator-push.txt
             emulator-install.txt
