@@ -1,14 +1,14 @@
-name: Build Actor Sticker Android APK v0.4
+name: Build Actor Sticker Android APK v0.5
 
 on:
   push:
-    branches: [ actor-sticker-android-apk-v0.4 ]
+    branches: [ actor-sticker-android-apk-v0.5 ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 48
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -23,34 +23,63 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Apply Max Quality build policy
+
+      - name: Apply v0.5 export policy to proven v0.4 engine
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java')
           s = p.read_text()
+          if 'import androidx.media3.common.MimeTypes;' not in s:
+              s = s.replace('import androidx.media3.common.MediaItem;\n', 'import androidx.media3.common.MediaItem;\nimport androidx.media3.common.MimeTypes;\n')
+
           old = '''int shortSide = Math.max(360, Math.min(s.sourceWidth(), s.sourceHeight()));\n                    int bitrate = recommendedBitrate(shortSide);'''
-          new = '''// Max Quality: request a high VBR-compatible bitrate first.\n                    // If a device encoder rejects it, exportTracked automatically retries with Media3 defaults.\n                    int bitrate = 28_000_000;'''
+          new = '''int shortSide = Math.max(360, Math.min(s.sourceWidth(), s.sourceHeight()));\n                    int bitrate = V050ExportPolicy.requestedBitrate(shortSide, prefs());'''
           if old not in s:
-              raise SystemExit('Max Quality source pattern not found')
-          p.write_text(s.replace(old, new))
+              raise SystemExit('bitrate source pattern missing')
+          s = s.replace(old, new, 1)
+
+          old = 'Transformer.Builder builder = new Transformer.Builder(this);'
+          new = '''Transformer.Builder builder = new Transformer.Builder(this);\n                String codec050 = V050ExportPolicy.normalizedCodec(prefs());\n                if ("HEVC".equals(codec050)) builder.setVideoMimeType(MimeTypes.VIDEO_H265);\n                else if ("AVC".equals(codec050)) builder.setVideoMimeType(MimeTypes.VIDEO_H264);'''
+          if old not in s:
+              raise SystemExit('transformer builder pattern missing')
+          s = s.replace(old, new, 1)
+
+          old = '''if (s.endMs - s.startMs < MIN_CLIP_MS) continue;\n                        if (s.endMs - s.startMs > clipSec * 1000L + 25) {'''
+          new = '''if (s.endMs - s.startMs < MIN_CLIP_MS) continue;\n                        if (p.getBoolean("exact_duration_v050", false) && Math.abs((s.endMs - s.startMs) - clipSec * 1000L) > 120L) {\n                            report.add("SKIP exact-duration guard " + displayName(video) + " @" + s.startMs);\n                            continue;\n                        }\n                        if (s.endMs - s.startMs > clipSec * 1000L + 25) {'''
+          if old not in s:
+              raise SystemExit('duration guard pattern missing')
+          s = s.replace(old, new, 1)
+
+          s = s.replace('.setTitle("v0.4 Export result")', '.setTitle("v0.5 Export result")')
+          p.write_text(s)
           PY
-          grep -q 'int bitrate = 28_000_000' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-      - name: Static v0.4 guards
+          grep -q 'V050ExportPolicy.requestedBitrate' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'exact_duration_v050' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'MimeTypes.VIDEO_H265' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+
+      - name: Static v0.5 guards
         run: |
-          grep -q "versionName '0.4.0'" app/build.gradle
-          grep -q 'MainActivityV040Final' app/src/main/AndroidManifest.xml
-          grep -q 'App version: 0.4.0' app/src/main/java/com/mhsx/actorsticker/MainActivityV040Final.java
-          grep -q 'clip_seconds' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'Smart face-following pan' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'int bitrate = 28_000_000' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'TrackingPanEffect' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'nearestHitDistance' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
-          grep -q 'MIN_CLIP_MS = 2000L' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'actor_cache' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
+          grep -q "versionName '0.5.0'" app/build.gradle
+          grep -q 'MainActivityV050' app/src/main/AndroidManifest.xml
+          grep -q 'BackgroundScanService' app/src/main/AndroidManifest.xml
+          grep -q 'FOREGROUND_SERVICE_MEDIA_PROCESSING' app/src/main/AndroidManifest.xml
+          grep -q 'ic_actor_sticker' app/src/main/AndroidManifest.xml
+          grep -q 'Dark Mode' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
+          grep -q 'Dynamic Zoom' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
+          grep -q 'Multi-Actor export' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
+          grep -q 'Background Actor Scan' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
+          grep -q 'Before / After Tracking Preview' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
+          grep -q 'Identity Embedding v2' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
+          grep -q 'FORMAT_VERSION = 5' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
+          grep -q 'CFG_DYNAMIC_ZOOM' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
+          grep -q 'predictLostCenter' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
+          grep -q 'requestedBitrate' app/src/main/java/com/mhsx/actorsticker/V050ExportPolicy.java
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
-      - name: Verify APK structure signature and permissions
+
+      - name: Verify APK signature alignment launcher icon and permissions
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
@@ -58,17 +87,18 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee apk-badging.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | tee apk-permissions.txt
           sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
-          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 10
-          grep -q "versionName='0.4.0'" apk-badging.txt
-          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV040Final'" apk-badging.txt
-          if grep -q android.permission.INTERNET apk-permissions.txt; then
-            echo "Unexpected INTERNET permission"
-            exit 1
-          fi
-      - name: Upload verified v0.4 final APK
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 12
+          grep -q "versionName='0.5.0'" apk-badging.txt
+          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV050'" apk-badging.txt
+          grep -q 'application-icon' apk-badging.txt
+          grep -q 'android.permission.FOREGROUND_SERVICE' apk-permissions.txt
+          if grep -q android.permission.INTERNET apk-permissions.txt; then echo "Unexpected INTERNET permission"; exit 1; fi
+          if grep -q android.permission.ACCESS_NETWORK_STATE apk-permissions.txt; then echo "Unexpected network-state permission"; exit 1; fi
+
+      - name: Upload verified v0.5 APK
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.4.0-FINAL-SmartTracking-MaxQuality
+          name: ActorStickerCutterAndroid-v0.5.0-Dark-UltraTracking-APK-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
@@ -76,6 +106,7 @@ jobs:
             apk-sha256.txt
           if-no-files-found: error
           retention-days: 7
+
       - name: Emulator install and launch smoke test
         continue-on-error: true
         timeout-minutes: 12
@@ -91,24 +122,25 @@ jobs:
           script: |
             adb wait-for-device
             adb logcat -c
-            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker.apk | tee emulator-push.txt
-            adb shell pm install -r /data/local/tmp/actor-sticker.apk | tee emulator-install.txt
+            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker-v050.apk | tee emulator-push.txt
+            adb shell pm install -r /data/local/tmp/actor-sticker-v050.apk | tee emulator-install.txt
             grep -q Success emulator-install.txt
             adb shell am force-stop com.mhsx.actorsticker
-            adb shell am start -n com.mhsx.actorsticker/.MainActivityV040Final | tee emulator-launch.txt
-            sleep 10
+            adb shell am start -W -n com.mhsx.actorsticker/.MainActivityV050 | tee emulator-launch.txt
+            sleep 8
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
             adb exec-out screencap -p > emulator-screen.png
             test -s emulator-screen.png
-            adb logcat -d -t 1500 > emulator-logcat.txt
+            adb logcat -d -t 1800 > emulator-logcat.txt
             ! grep -E "FATAL EXCEPTION|Process: com\.mhsx\.actorsticker.*has died|AndroidRuntime.*FATAL" emulator-logcat.txt
             echo "Emulator install/launch smoke test passed" | tee emulator-result.txt
+
       - name: Upload emulator evidence
         if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.4.0-FINAL-emulator-evidence
+          name: ActorStickerCutterAndroid-v0.5.0-emulator-evidence
           path: |
             emulator-push.txt
             emulator-install.txt
