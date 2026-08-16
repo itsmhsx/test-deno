@@ -22,6 +22,16 @@ if '<activity android:name=".MainActivityV110"' not in s:
     s=s.replace(marker,insert,1)
 manifest.write_text(s)
 
+# Avoid any API-level dependent String.repeat fallback and make the rare missing-ANDROID_ID
+# case unique per installation instead of collapsing every such device to the same fingerprint.
+lic=Path('app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java')
+s=lic.read_text()
+old='''            String id=Settings.Secure.getString(c.getContentResolver(),Settings.Secure.ANDROID_ID);\n            if(id==null||id.trim().isEmpty())id="unknown";\n            return hex(MessageDigest.getInstance("SHA-256").digest(("ASC110|"+c.getPackageName()+"|"+id).getBytes(StandardCharsets.UTF_8)));\n        }catch(Throwable e){return "0".repeat(64);}'''
+new='''            String id=Settings.Secure.getString(c.getContentResolver(),Settings.Secure.ANDROID_ID);\n            if(id==null||id.trim().isEmpty()){SharedPreferences fp=c.getSharedPreferences(PREF,Context.MODE_PRIVATE);id=fp.getString("fallback_device_id","");if(id.isEmpty()){id=UUID.randomUUID().toString();fp.edit().putString("fallback_device_id",id).apply();}}\n            return hex(MessageDigest.getInstance("SHA-256").digest(("ASC110|"+c.getPackageName()+"|"+id).getBytes(StandardCharsets.UTF_8)));\n        }catch(Throwable e){try{return hex(MessageDigest.getInstance("SHA-256").digest(("ASC110|"+c.getPackageName()+"|fallback").getBytes(StandardCharsets.UTF_8)));}catch(Throwable ignored){return "0000000000000000000000000000000000000000000000000000000000000000";}}'''
+if old not in s: raise SystemExit('v110 deviceHash hardening marker missing')
+s=s.replace(old,new,1)
+lic.write_text(s)
+
 # Every foreground work entry point also checks the signed local entitlement,
 # so WorkManager/notifications cannot bypass the launcher gate.
 bg=Path('app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java')
