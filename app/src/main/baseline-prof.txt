@@ -1,0 +1,8 @@
+HSPLcom/mhsx/actorsticker/MainActivityV070;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/mhsx/actorsticker/MainActivityV060;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/mhsx/actorsticker/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/mhsx/actorsticker/BackgroundScanService;->onStartCommand(Landroid/content/Intent;II)I
+HSPLcom/mhsx/actorsticker/V070Scanner;->run(Landroid/content/Context;Landroid/content/SharedPreferences;Lcom/mhsx/actorsticker/ActorScanStore;Ljava/util/concurrent/atomic/AtomicBoolean;ZLcom/mhsx/actorsticker/V070Scanner$Progress;)Lcom/mhsx/actorsticker/V070Scanner$Result;
+Lcom/mhsx/actorsticker/V070FrameSampler;
+Lcom/mhsx/actorsticker/V070QuickFaceDetector;
+Lcom/mhsx/actorsticker/TrackingPanEffect;
