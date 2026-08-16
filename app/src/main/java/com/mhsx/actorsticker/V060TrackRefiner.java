@@ -37,7 +37,6 @@ final class V060TrackRefiner {
         try (FaceEngine engine = new FaceEngine()) {
             mr.setDataSource(context, source);
             long span = Math.max(1, endMs - startMs);
-            int serial = 0;
             for (long t = startMs; t <= endMs; t += step) {
                 Bitmap raw = null, frame = null;
                 try {
@@ -54,11 +53,10 @@ final class V060TrackRefiner {
                         for (Face f : faces) {
                             Rect b = f.getBoundingBox();
                             if (b == null || b.width() < 24 || b.height() < 24) continue;
-                            float[] d = engine.descriptor(frame, b);
+                            float[] d = V060AlignedDescriptor.descriptor(engine, frame, f);
                             if (d == null) continue;
                             float sim = FaceEngine.cosine(actor.centroid, d);
                             float q = engine.quality(frame, b);
-                            // A high-quality face may receive only a tiny tie-break bonus.
                             float rank = sim + Math.min(0.035f, q * 0.035f);
                             if (rank > best) { best = rank; bestFace = f; bestQ = q; }
                         }
@@ -74,7 +72,6 @@ final class V060TrackRefiner {
                     if (frame != null && !frame.isRecycled()) frame.recycle();
                     if (raw != null && !raw.isRecycled()) raw.recycle();
                 }
-                serial++;
                 int p = (int)Math.min(100, Math.round(((t - startMs) / (double)span) * 100.0));
                 prefs.edit().putInt("v060_track_progress", p).putString("v060_track_status", "Dense face tracking " + p + "%").apply();
             }
@@ -85,7 +82,6 @@ final class V060TrackRefiner {
         }
 
         out.sort(Comparator.comparingLong(h -> h.t));
-        // Collapse near-duplicate timestamps, keeping the stronger observation.
         ArrayList<ActorScanStore.Hit> clean = new ArrayList<>();
         for (ActorScanStore.Hit h : out) {
             if (h.t < startMs - 900 || h.t > endMs + 900) continue;
