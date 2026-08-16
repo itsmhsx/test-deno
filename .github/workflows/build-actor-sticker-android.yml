@@ -1,8 +1,8 @@
-name: Build Actor Sticker Android APK v0.5
+name: Build Actor Sticker Android APK v0.6
 
 on:
   push:
-    branches: [ actor-sticker-android-apk-v0.5 ]
+    branches: [ actor-sticker-android-apk-v0.6 ]
   workflow_dispatch:
 
 jobs:
@@ -24,35 +24,31 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Apply v0.5 export intelligence
+      - name: Apply v0.6 intelligence patches
         run: |
           python3 tools/patch_v050.py
           grep -q 'V050ExportPolicy.requestedBitrate' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'best_moment_v050' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'V050SceneRefiner.refine' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'isNearDuplicate' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'exact_duration_v050' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
-          grep -q 'MimeTypes.VIDEO_H265' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'V060TrackRefiner.refine' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'V060MomentClassifier.accept' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'best_only_v060' app/src/main/java/com/mhsx/actorsticker/MainActivityV040.java
+          grep -q 'smart_sampler_v060' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
+          grep -q 'V060AlignedDescriptor' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
+          grep -q 'LANDMARK_MODE_ALL' app/src/main/java/com/mhsx/actorsticker/FaceEngine.java
 
-      - name: Static v0.5 guards
+      - name: Static v0.6 guards
         run: |
-          grep -q "versionName '0.5.0'" app/build.gradle
-          grep -q 'MainActivityV050' app/src/main/AndroidManifest.xml
-          grep -q 'BackgroundScanService' app/src/main/AndroidManifest.xml
+          grep -q "versionName '0.6.0'" app/build.gradle
+          grep -q 'MainActivityV060' app/src/main/AndroidManifest.xml
           grep -q 'FOREGROUND_SERVICE_MEDIA_PROCESSING' app/src/main/AndroidManifest.xml
           grep -q 'ic_actor_sticker' app/src/main/AndroidManifest.xml
-          grep -q 'Dark Mode' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
-          grep -q 'Dynamic Zoom' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
-          grep -q 'Multi-Actor export' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
-          grep -q 'Background Actor Scan' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
-          grep -q 'Before / After Tracking Preview' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
-          grep -q 'Identity Embedding v2' app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java
-          grep -q 'FORMAT_VERSION = 5' app/src/main/java/com/mhsx/actorsticker/ActorScanStore.java
-          grep -q 'CFG_DYNAMIC_ZOOM' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
-          grep -q 'predictLostCenter' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
-          grep -q 'requestedBitrate' app/src/main/java/com/mhsx/actorsticker/V050ExportPolicy.java
-          grep -q 'nearestVisualCut' app/src/main/java/com/mhsx/actorsticker/V050SceneRefiner.java
-          grep -q 'alignAudioSamples' app/src/main/java/com/mhsx/actorsticker/V050SceneRefiner.java
+          grep -q 'language_v060' app/src/main/java/com/mhsx/actorsticker/MainActivityV060.java
+          grep -q 'theme_v060' app/src/main/java/com/mhsx/actorsticker/MainActivityV060.java
+          grep -q 'Dense identity-locked tracking' app/src/main/java/com/mhsx/actorsticker/MainActivityV060.java
+          grep -q 'ConfidenceTimeline' app/src/main/java/com/mhsx/actorsticker/MainActivityV060.java
+          grep -q 'V060Learning' app/src/main/java/com/mhsx/actorsticker/MainActivityV060.java
+          grep -q 'configureV060' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
+          grep -q 'Look room' app/src/main/java/com/mhsx/actorsticker/TrackingPanEffect.java
+          grep -q 'V060AlignedDescriptor' app/src/main/java/com/mhsx/actorsticker/V060TrackRefiner.java
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
@@ -66,17 +62,17 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | tee apk-permissions.txt
           sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
           unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 12
-          grep -q "versionName='0.5.0'" apk-badging.txt
-          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV050'" apk-badging.txt
+          grep -q "versionName='0.6.0'" apk-badging.txt
+          grep -q "launchable-activity: name='com.mhsx.actorsticker.MainActivityV060'" apk-badging.txt
           grep -q 'application-icon' apk-badging.txt
           grep -q 'android.permission.FOREGROUND_SERVICE' apk-permissions.txt
           if grep -q android.permission.INTERNET apk-permissions.txt; then echo "Unexpected INTERNET permission"; exit 1; fi
           if grep -q android.permission.ACCESS_NETWORK_STATE apk-permissions.txt; then echo "Unexpected network-state permission"; exit 1; fi
 
-      - name: Upload verified v0.5 APK
+      - name: Upload verified v0.6 APK
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.5.0-Dark-UltraTracking-APK-verified
+          name: ActorStickerCutterAndroid-v0.6.0-Modern-Multilingual-APK-verified
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-badging.txt
@@ -100,11 +96,11 @@ jobs:
           script: |
             adb wait-for-device
             adb logcat -c
-            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker-v050.apk | tee emulator-push.txt
-            adb shell pm install -r /data/local/tmp/actor-sticker-v050.apk | tee emulator-install.txt
+            adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/actor-sticker-v060.apk | tee emulator-push.txt
+            adb shell pm install -r /data/local/tmp/actor-sticker-v060.apk | tee emulator-install.txt
             grep -q Success emulator-install.txt
             adb shell am force-stop com.mhsx.actorsticker
-            adb shell am start -W -n com.mhsx.actorsticker/.MainActivityV050 | tee emulator-launch.txt
+            adb shell am start -W -n com.mhsx.actorsticker/.MainActivityV060 | tee emulator-launch.txt
             sleep 8
             adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
             test -s emulator-pid.txt
@@ -118,7 +114,7 @@ jobs:
         if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: ActorStickerCutterAndroid-v0.5.0-emulator-evidence
+          name: ActorStickerCutterAndroid-v0.6.0-emulator-evidence
           path: |
             emulator-push.txt
             emulator-install.txt
