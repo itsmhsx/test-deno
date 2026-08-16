@@ -14,55 +14,42 @@ import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
-/**
- * v0.8 offline identity embedding. The model is bundled in the APK and runs
- * fully on-device. It expects a 112x112 RGB face crop normalized to [-1, 1]
- * and returns a 192-D MobileFaceNet embedding which is L2-normalized here.
- */
+/** Offline 192-D MobileFaceNet embedding with v0.9 adaptive thread tuning. */
 final class V080FaceEmbedder {
     private static final String MODEL = "models/mobilefacenet.tflite";
     private static volatile V080FaceEmbedder instance;
+    private static volatile int configuredThreads;
     private final Interpreter interpreter;
     private final ByteBuffer input = ByteBuffer.allocateDirect(1 * 112 * 112 * 3 * 4).order(ByteOrder.nativeOrder());
     private final float[][] output = new float[1][192];
 
     private V080FaceEmbedder(Context context) throws Exception {
         Interpreter.Options options = new Interpreter.Options();
-        options.setNumThreads(Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors())));
+        int pref=context.getSharedPreferences("actor_sticker",Context.MODE_PRIVATE).getInt("face_threads_v090",0);
+        int threads=configuredThreads>0?configuredThreads:(pref>0?pref:Math.max(2,Math.min(4,Runtime.getRuntime().availableProcessors())));
+        options.setNumThreads(Math.max(1,Math.min(4,threads)));
         options.setUseXNNPACK(true);
         interpreter = new Interpreter(loadModel(context, MODEL), options);
         int[] in = interpreter.getInputTensor(0).shape();
         int[] out = interpreter.getOutputTensor(0).shape();
-        if (in.length != 4 || in[1] != 112 || in[2] != 112 || in[3] != 3)
-            throw new IllegalStateException("Unexpected MobileFaceNet input shape");
-        if (out.length < 2 || out[out.length - 1] != 192)
-            throw new IllegalStateException("Unexpected MobileFaceNet output shape");
+        if (in.length != 4 || in[1] != 112 || in[2] != 112 || in[3] != 3) throw new IllegalStateException("Unexpected MobileFaceNet input shape");
+        if (out.length < 2 || out[out.length - 1] != 192) throw new IllegalStateException("Unexpected MobileFaceNet output shape");
     }
+
+    static synchronized void configureThreads(int n){configuredThreads=Math.max(1,Math.min(4,n));V080FaceEmbedder x=instance;instance=null;if(x!=null)try{x.interpreter.close();}catch(Throwable ignored){}}
 
     static float[] embedding(Bitmap src, Rect box) {
         try {
             Context c = V080App.context();
             if (c == null || src == null || box == null) return null;
             V080FaceEmbedder x = instance;
-            if (x == null) {
-                synchronized (V080FaceEmbedder.class) {
-                    x = instance;
-                    if (x == null) instance = x = new V080FaceEmbedder(c);
-                }
-            }
+            if (x == null) synchronized (V080FaceEmbedder.class) {x=instance;if(x==null)instance=x=new V080FaceEmbedder(c);}
             return x.run(src, box);
-        } catch (Throwable ignored) {
-            return null;
-        }
+        } catch (Throwable ignored) { return null; }
     }
 
     static boolean available() {
-        try {
-            Context c = V080App.context();
-            if (c == null) return false;
-            c.getAssets().open(MODEL).close();
-            return true;
-        } catch (Throwable ignored) { return false; }
+        try {Context c=V080App.context();if(c==null)return false;c.getAssets().open(MODEL).close();return true;} catch (Throwable ignored) { return false; }
     }
 
     private synchronized float[] run(Bitmap src, Rect box) {
@@ -77,32 +64,16 @@ final class V080FaceEmbedder {
             if (top + side > crop.getHeight()) top = crop.getHeight() - side;
             square = Bitmap.createBitmap(crop, left, Math.max(0, top), side, side);
             scaled = Bitmap.createScaledBitmap(square, 112, 112, true);
-
-            input.rewind();
-            int[] pixels = new int[112 * 112];
-            scaled.getPixels(pixels, 0, 112, 0, 0, 112, 112);
-            for (int c : pixels) {
-                input.putFloat(Color.red(c) / 127.5f - 1f);
-                input.putFloat(Color.green(c) / 127.5f - 1f);
-                input.putFloat(Color.blue(c) / 127.5f - 1f);
-            }
-            interpreter.run(input, output);
-            float[] v = output[0].clone();
-            FaceEngine.normalize(v);
-            return v;
-        } catch (Throwable ignored) {
-            return null;
-        } finally {
-            if (scaled != null && scaled != square && !scaled.isRecycled()) scaled.recycle();
-            if (square != null && square != crop && !square.isRecycled()) square.recycle();
-            if (crop != null && !crop.isRecycled()) crop.recycle();
-        }
+            input.rewind();int[] pixels = new int[112 * 112];scaled.getPixels(pixels, 0, 112, 0, 0, 112, 112);
+            for (int c : pixels) {input.putFloat(Color.red(c) / 127.5f - 1f);input.putFloat(Color.green(c) / 127.5f - 1f);input.putFloat(Color.blue(c) / 127.5f - 1f);}
+            interpreter.run(input, output);float[] v = output[0].clone();FaceEngine.normalize(v);return v;
+        } catch (Throwable ignored) { return null; }
+        finally {if (scaled != null && scaled != square && !scaled.isRecycled()) scaled.recycle();if (square != null && square != crop && !square.isRecycled()) square.recycle();if (crop != null && !crop.isRecycled()) crop.recycle();}
     }
 
     private static MappedByteBuffer loadModel(Context context, String asset) throws Exception {
         AssetFileDescriptor afd = context.getAssets().openFd(asset);
-        try (FileInputStream in = new FileInputStream(afd.getFileDescriptor()); FileChannel channel = in.getChannel()) {
-            return channel.map(FileChannel.MapMode.READ_ONLY, afd.getStartOffset(), afd.getDeclaredLength());
-        } finally { afd.close(); }
+        try (FileInputStream in = new FileInputStream(afd.getFileDescriptor()); FileChannel channel = in.getChannel()) {return channel.map(FileChannel.MapMode.READ_ONLY, afd.getStartOffset(), afd.getDeclaredLength());}
+        finally { afd.close(); }
     }
 }
