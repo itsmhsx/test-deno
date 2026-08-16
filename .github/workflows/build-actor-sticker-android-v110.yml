@@ -1,0 +1,163 @@
+name: Build Actor Sticker Android APK v1.1 Licensing
+
+on:
+  push:
+    branches: [ actor-sticker-android-apk-v1.1 ]
+  workflow_dispatch:
+
+jobs:
+  build-license:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "system-images;android-29;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Fetch pinned offline MobileFaceNet model
+        run: |
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 2 \
+            "https://raw.githubusercontent.com/hugocornellier/face_detection_tflite/50c784adaa9f40c722affb1d4412674f25e1fe0c/assets/models/mobilefacenet.tflite" \
+            -o app/src/main/assets/models/mobilefacenet.tflite
+          test -s app/src/main/assets/models/mobilefacenet.tflite
+          test "$(stat -c%s app/src/main/assets/models/mobilefacenet.tflite)" -gt 500000
+          sha256sum app/src/main/assets/models/mobilefacenet.tflite | tee model-sha256.txt
+
+      - name: Apply production and v1.1 licensing patches
+        run: |
+          python3 tools/patch_v050.py
+          python3 tools/patch_v061.py
+          python3 tools/patch_v070.py
+          python3 tools/patch_v080.py
+          python3 tools/patch_v081.py
+          python3 tools/patch_v090.py
+          python3 tools/patch_v100.py
+          python3 tools/patch_v100_cinematic.py
+          python3 tools/patch_v110.py
+
+      - name: Static v1.1 licensing guards
+        run: |
+          grep -q "compileSdk 36" app/build.gradle
+          grep -q "versionCode 14" app/build.gradle
+          grep -q "versionName '1.1.0'" app/build.gradle
+          grep -q 'android.permission.INTERNET' app/src/main/AndroidManifest.xml
+          ! grep -q 'android.permission.INTERNET.*tools:node="remove"' app/src/main/AndroidManifest.xml
+          grep -q 'LicenseGateActivity' app/src/main/AndroidManifest.xml
+          grep -q 'MainActivityV110' app/src/main/AndroidManifest.xml
+          grep -q 'MainActivityV100' app/src/main/AndroidManifest.xml
+          grep -q 'functions/v1/actor-license' app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java
+          grep -q 'SHA256withRSA' app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java
+          grep -q 'AndroidKeyStore' app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java
+          grep -q 'device_mismatch' app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java
+          grep -q '7-day Free Trial' app/src/main/java/com/mhsx/actorsticker/LicenseGateActivity.java
+          grep -q 'Lifetime License' app/src/main/java/com/mhsx/actorsticker/LicenseGateActivity.java
+          grep -q 'V110LicenseManager.local(this).valid' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
+          grep -q 'V110LicenseManager.local(this).valid' app/src/main/java/com/mhsx/actorsticker/V080ExportService.java
+          grep -q 'v090_face_follow_enabled",false' app/src/main/java/com/mhsx/actorsticker/MainActivityV100.java
+          grep -q 'Fixed actor average' app/src/main/java/com/mhsx/actorsticker/MainActivityV100.java
+          grep -q 'MainActivityV110' app/src/main/baseline-prof.txt
+          test -s app/src/main/assets/models/MOBILEFACENET_NOTICE.txt
+
+      - name: Live license backend smoke
+        run: |
+          DEVICE=$(printf 'actor-ci-%s' "$GITHUB_RUN_ID" | sha256sum | cut -d' ' -f1)
+          RESP=$(curl -sS --fail --retry 4 --retry-delay 2 \
+            -X POST 'https://noweucaayalylobeklzc.supabase.co/functions/v1/actor-license' \
+            -H 'content-type: application/json' \
+            --data "{\"action\":\"trial\",\"device\":\"$DEVICE\",\"appVersion\":\"1.1.0-ci\"}")
+          printf '%s\n' "$RESP" | tee license-backend-smoke.json
+          echo "$RESP" | grep -q '"status":"trial"'
+          echo "$RESP" | grep -q '"token":"'
+
+      - name: Build debug APK and R8 release smoke
+        run: |
+          gradle :app:assembleDebug --no-daemon --stacktrace
+          gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify v1.1 APK
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | tee apk-permissions.txt
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | tee apk-files.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 12
+          grep -q "versionName='1.1.0'" apk-badging.txt
+          grep -q "launchable-activity: name='com.mhsx.actorsticker.LicenseGateActivity'" apk-badging.txt
+          grep -q 'android.permission.INTERNET' apk-permissions.txt
+          grep -q 'android.permission.FOREGROUND_SERVICE' apk-permissions.txt
+          if grep -q android.permission.ACCESS_NETWORK_STATE apk-permissions.txt; then echo 'Unexpected ACCESS_NETWORK_STATE'; exit 1; fi
+          grep -q 'assets/models/mobilefacenet.tflite' apk-files.txt
+
+      - name: Upload verified v1.1 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ActorStickerCutterAndroid-v1.1.0-Licensing-APK-verified
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            apk-badging.txt
+            apk-permissions.txt
+            apk-sha256.txt
+            model-sha256.txt
+            license-backend-smoke.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Emulator install and license gate smoke
+        continue-on-error: true
+        timeout-minutes: 12
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: true
+          disable-linux-hw-accel: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            adb wait-for-device
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk | tee emulator-install.txt
+            grep -q Success emulator-install.txt
+            adb shell am force-stop com.mhsx.actorsticker
+            adb shell am start -W -n com.mhsx.actorsticker/.LicenseGateActivity | tee emulator-launch.txt
+            sleep 8
+            adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
+            test -s emulator-pid.txt
+            adb shell uiautomator dump /sdcard/window.xml || true
+            adb pull /sdcard/window.xml emulator-window.xml || true
+            grep -q '7-day Free Trial' emulator-window.xml
+            adb exec-out screencap -p > emulator-screen.png
+            adb logcat -d -t 2600 > emulator-logcat.txt
+            ! grep -E 'FATAL EXCEPTION|Process: com\.mhsx\.actorsticker.*has died|AndroidRuntime.*FATAL' emulator-logcat.txt
+            echo 'License gate emulator smoke passed' | tee emulator-result.txt
+
+      - name: Upload emulator evidence
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ActorStickerCutterAndroid-v1.1.0-license-emulator-evidence
+          path: |
+            emulator-install.txt
+            emulator-launch.txt
+            emulator-pid.txt
+            emulator-window.xml
+            emulator-screen.png
+            emulator-logcat.txt
+            emulator-result.txt
+          if-no-files-found: warn
+          retention-days: 7
