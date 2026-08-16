@@ -14,7 +14,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
-            android:name=".MainActivityV050"
+            android:name=".MainActivityV060"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="unspecified">
@@ -23,6 +23,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".MainActivityV050" android:exported="false" />
         <activity android:name=".MainActivityV040Final" android:exported="false" />
         <activity android:name=".MainActivityV040" android:exported="false" />
         <activity android:name=".MainActivityV031" android:exported="false" />
