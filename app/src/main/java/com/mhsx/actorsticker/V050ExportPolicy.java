@@ -1,6 +1,5 @@
 package com.mhsx.actorsticker;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -22,8 +21,6 @@ final class V050ExportPolicy {
             if (shortSide >= 700) return 9_000_000;
             return 6_000_000;
         }
-        // Maximum: preserve source crop resolution and ask the hardware encoder
-        // for a high bitrate; MainActivityV040 already retries with safe defaults.
         if (shortSide >= 2000) return 48_000_000;
         if (shortSide >= 1400) return 34_000_000;
         if (shortSide >= 1000) return 28_000_000;
@@ -35,6 +32,7 @@ final class V050ExportPolicy {
         String requested = prefs.getString("video_codec_v050", "Auto");
         if ("H.265/HEVC".equals(requested) && supportsEncoder("video/hevc")) return "HEVC";
         if ("H.264/AVC".equals(requested)) return "AVC";
+        if (prefs.getBoolean("auto_codec_v070", true)) return V070CodecAdvisor.bestCodec(prefs);
         return "AUTO";
     }
 
