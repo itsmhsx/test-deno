@@ -1,0 +1,30 @@
+name: Export Android Signing Tools v1.2
+
+on:
+  push:
+    branches: [ actor-sticker-android-apk-v1.2 ]
+  workflow_dispatch:
+
+jobs:
+  export-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "build-tools;35.0.0"
+      - name: Package official tools
+        run: |
+          mkdir -p sign-tools/lib
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" sign-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" sign-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" sign-tools/lib/
+          chmod +x sign-tools/apksigner sign-tools/zipalign sign-tools/aapt
+          sha256sum sign-tools/apksigner sign-tools/zipalign sign-tools/aapt sign-tools/lib/apksigner.jar > sign-tools/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-35-signing-linux
+          path: sign-tools
+          retention-days: 7
