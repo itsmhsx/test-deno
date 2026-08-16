@@ -10,13 +10,17 @@ android {
         applicationId 'com.mhsx.actorsticker'
         minSdk 26
         targetSdk 35
-        versionCode 8
-        versionName '0.6.1'
+        versionCode 9
+        versionName '0.7.0'
     }
 
     buildTypes {
-        release {
+        debug {
             minifyEnabled false
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -29,7 +33,11 @@ android {
 
 dependencies {
     implementation 'com.google.mlkit:face-detection:16.1.7'
-    implementation 'androidx.media3:media3-common:1.6.1'
-    implementation 'androidx.media3:media3-transformer:1.6.1'
-    implementation 'androidx.media3:media3-effect:1.6.1'
+    implementation 'androidx.media3:media3-common:1.10.1'
+    implementation 'androidx.media3:media3-transformer:1.10.1'
+    implementation 'androidx.media3:media3-effect:1.10.1'
+    implementation 'androidx.media3:media3-exoplayer:1.10.1'
+    implementation 'androidx.media3:media3-inspector:1.10.1'
+    implementation 'androidx.media3:media3-inspector-frame:1.10.1'
+    implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
 }
