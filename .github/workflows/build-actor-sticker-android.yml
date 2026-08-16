@@ -63,7 +63,7 @@ jobs:
           grep -q 'V090Diagnostics.install' app/src/main/java/com/mhsx/actorsticker/V080App.java
           grep -q 'recoverStalled' app/src/main/java/com/mhsx/actorsticker/V080ExportQueue.java
           grep -q 'partialResume090' app/src/main/java/com/mhsx/actorsticker/V070Scanner.java
-          grep -q 'V090WorkController' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
+          grep -q 'v090_work_kind' app/src/main/java/com/mhsx/actorsticker/BackgroundScanService.java
           grep -q 'V090FaceQualityGate.allow' app/src/main/java/com/mhsx/actorsticker/FaceEngine.java
           grep -q 'V090ReferenceBank.similarity' app/src/main/java/com/mhsx/actorsticker/V070Scanner.java
           grep -q 'Possible duplicate actors' app/src/main/java/com/mhsx/actorsticker/MainActivityV090.java
