@@ -126,11 +126,12 @@ s = s.replace('.setTitle("v0.4 Export result")', '.setTitle("v0.5 Export result"
 p.write_text(s)
 
 # MainActivity inherits Activity.setProgress(int), so a private helper with the
-# same signature is illegal Java. Rename both local calls and the helper only in
-# the CI build workspace while keeping behavior identical.
+# same signature is illegal Java. Rename local helper references in the CI build
+# workspace, but keep ProgressBar.setProgress(int) unchanged.
 p50 = Path('app/src/main/java/com/mhsx/actorsticker/MainActivityV050.java')
 s50 = p50.read_text()
 s50 = s50.replace('setProgress(', 'setJobProgress050(')
+s50 = s50.replace('((ProgressBar)f.get(this)).setJobProgress050(', '((ProgressBar)f.get(this)).setProgress(')
 p50.write_text(s50)
 
 print('v0.5 export + compile compatibility patch applied')
