@@ -45,12 +45,15 @@ if old not in s:
 s = s.replace(old, new, 1)
 ui.write_text(s)
 
-# 5) Fix the v0.8 activity's checked exception import. Keep this in the patch so
-# the branch remains easy to review and the generated build tree is deterministic.
+# 5) Fix v0.8 source-level compatibility/compile details after the large Studio layer.
 main80 = Path('app/src/main/java/com/mhsx/actorsticker/MainActivityV080.java')
 s = main80.read_text()
 if 'import java.io.IOException;' not in s:
     s = s.replace('import java.io.File;\n', 'import java.io.File;\nimport java.io.IOException;\n', 1)
+bad = '''private void addSuggestions(LinearLayout c,String key,ActorScanStore.ScanState s){LinearLayout box=panel(tr80("Smart Suggestions"));box.addView(note(studio.suggestions(key,s,new ActorScanStore(this).cacheBytes(),V070CodecAdvisor.bestCodec(p())));c.addView(box);}'''
+good = '''private void addSuggestions(LinearLayout c,String key,ActorScanStore.ScanState s){LinearLayout box=panel(tr80("Smart Suggestions"));box.addView(note(studio.suggestions(key,s,new ActorScanStore(this).cacheBytes(),V070CodecAdvisor.bestCodec(p()))));c.addView(box);}'''
+if bad in s:
+    s = s.replace(bad, good, 1)
 main80.write_text(s)
 
 # 6) Force final version fields after all older patch layers have run.
