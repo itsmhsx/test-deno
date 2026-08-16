@@ -1,0 +1,7 @@
+Actor Sticker Cutter v0.8 includes an offline MobileFaceNet TFLite model fetched at build time from the pinned source revision:
+https://github.com/hugocornellier/face_detection_tflite/tree/50c784adaa9f40c722affb1d4412674f25e1fe0c
+Model path: assets/models/mobilefacenet.tflite
+
+The referenced repository is distributed under the Apache License, Version 2.0. The build is pinned to the revision above so the model artifact used by CI cannot silently move to a different source revision.
+
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
