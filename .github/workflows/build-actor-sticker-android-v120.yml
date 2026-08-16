@@ -1,0 +1,167 @@
+name: Build Actor Sticker Android APK v1.2 Xiaomi Admin
+
+on:
+  push:
+    branches: [ actor-sticker-android-apk-v1.2 ]
+  workflow_dispatch:
+
+jobs:
+  build-v120:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "system-images;android-29;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Fetch pinned offline MobileFaceNet model
+        run: |
+          mkdir -p app/src/main/assets/models
+          curl -L --fail --retry 4 --retry-delay 2 \
+            "https://raw.githubusercontent.com/hugocornellier/face_detection_tflite/50c784adaa9f40c722affb1d4412674f25e1fe0c/assets/models/mobilefacenet.tflite" \
+            -o app/src/main/assets/models/mobilefacenet.tflite
+          test -s app/src/main/assets/models/mobilefacenet.tflite
+          test "$(stat -c%s app/src/main/assets/models/mobilefacenet.tflite)" -gt 500000
+          sha256sum app/src/main/assets/models/mobilefacenet.tflite | tee model-sha256.txt
+
+      - name: Apply all production patches through v1.2
+        run: |
+          python3 tools/patch_v050.py
+          python3 tools/patch_v061.py
+          python3 tools/patch_v070.py
+          python3 tools/patch_v080.py
+          python3 tools/patch_v081.py
+          python3 tools/patch_v090.py
+          python3 tools/patch_v100.py
+          python3 tools/patch_v100_cinematic.py
+          python3 tools/patch_v110.py
+          python3 tools/patch_v120.py
+
+      - name: Static v1.2 guards
+        run: |
+          grep -q "compileSdk 36" app/build.gradle
+          grep -q "versionCode 15" app/build.gradle
+          grep -q "versionName '1.2.0'" app/build.gradle
+          grep -q 'android.permission.INTERNET' app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.POST_NOTIFICATIONS' app/src/main/AndroidManifest.xml
+          grep -q 'MainActivityV120' app/src/main/AndroidManifest.xml
+          grep -q 'LicenseGateActivity' app/src/main/AndroidManifest.xml
+          grep -q 'MainActivityV120.class' app/src/main/java/com/mhsx/actorsticker/LicenseGateActivity.java
+          grep -q 'v1.2 Xiaomi + Admin Edition' app/src/main/java/com/mhsx/actorsticker/LicenseGateActivity.java
+          grep -q 'signedToken(Context' app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java
+          grep -q 'appVersion","1.2.0' app/src/main/java/com/mhsx/actorsticker/V110LicenseManager.java
+          grep -q 'actor-heartbeat' app/src/main/java/com/mhsx/actorsticker/V120UsageReporter.java
+          grep -q 'Build.MANUFACTURER' app/src/main/java/com/mhsx/actorsticker/V120UsageReporter.java
+          grep -q 'AutoStartManagementActivity' app/src/main/java/com/mhsx/actorsticker/V120XiaomiTuner.java
+          grep -q 'HiddenAppsConfigActivity' app/src/main/java/com/mhsx/actorsticker/V120XiaomiTuner.java
+          grep -q 'memory_guard_v090' app/src/main/java/com/mhsx/actorsticker/V120XiaomiTuner.java
+          grep -q 'thermal_adaptive_v090' app/src/main/java/com/mhsx/actorsticker/V120XiaomiTuner.java
+          grep -q 'Xiaomi / HyperOS performance profile applied' app/src/main/java/com/mhsx/actorsticker/MainActivityV120.java
+          grep -q 'Private Admin Dashboard telemetry' app/src/main/java/com/mhsx/actorsticker/MainActivityV120.java
+          grep -q 'v090_face_follow_enabled",false' app/src/main/java/com/mhsx/actorsticker/MainActivityV100.java
+          grep -q 'MainActivityV120' app/src/main/baseline-prof.txt
+
+      - name: Live backend smoke without creating users
+        run: |
+          curl -fsS "https://noweucaayalylobeklzc.supabase.co/functions/v1/actor-admin" | grep -q 'Actor Sticker Admin'
+          code=$(curl -sS -o heartbeat.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -d '{"device":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","token":"invalid","appVersion":"1.2.0","brand":"Xiaomi","model":"CI","sdk":35}' \
+            "https://noweucaayalylobeklzc.supabase.co/functions/v1/actor-heartbeat")
+          test "$code" = "401"
+          grep -q 'unauthorized' heartbeat.json
+
+      - name: Build debug release and bundle
+        run: |
+          gradle :app:assembleDebug --no-daemon --stacktrace
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          gradle :app:bundleRelease --no-daemon --stacktrace
+
+      - name: Verify v1.2 debug and release artifacts
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s app/build/outputs/bundle/release/app-release.aab
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk | tee apk-permissions.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/bundle/release/app-release.aab | tee artifact-sha256.txt
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 8
+          grep -q "versionCode='15'" apk-badging.txt
+          grep -q "versionName='1.2.0'" apk-badging.txt
+          grep -q "launchable-activity: name='com.mhsx.actorsticker.LicenseGateActivity'" apk-badging.txt
+          grep -q 'android.permission.INTERNET' apk-permissions.txt
+          grep -q 'android.permission.POST_NOTIFICATIONS' apk-permissions.txt
+          if grep -q android.permission.ACCESS_NETWORK_STATE apk-permissions.txt; then echo 'Unexpected ACCESS_NETWORK_STATE'; exit 1; fi
+
+      - name: Upload v1.2 unsigned release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ActorStickerCutterAndroid-v1.2.0-XiaomiAdmin-unsigned-release
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/bundle/release/app-release.aab
+            apk-badging.txt
+            apk-permissions.txt
+            artifact-sha256.txt
+            model-sha256.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Emulator install and license gate smoke
+        continue-on-error: true
+        timeout-minutes: 12
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: true
+          disable-linux-hw-accel: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            adb wait-for-device
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk | tee emulator-install.txt
+            grep -q Success emulator-install.txt
+            adb shell am start -W -n com.mhsx.actorsticker/.LicenseGateActivity | tee emulator-launch.txt
+            sleep 5
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml emulator-window.xml
+            grep -q '7-day Free Trial' emulator-window.xml
+            grep -q 'v1.2 Xiaomi + Admin Edition' emulator-window.xml
+            adb shell pidof com.mhsx.actorsticker | tee emulator-pid.txt
+            test -s emulator-pid.txt
+            adb exec-out screencap -p > emulator-screen.png
+            adb logcat -d -t 2600 > emulator-logcat.txt
+            ! grep -E 'FATAL EXCEPTION|AndroidRuntime.*FATAL' emulator-logcat.txt
+            echo 'Emulator license-gate smoke passed' | tee emulator-result.txt
+
+      - name: Upload emulator evidence
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ActorStickerCutterAndroid-v1.2.0-XiaomiAdmin-emulator-evidence
+          path: |
+            emulator-install.txt
+            emulator-launch.txt
+            emulator-window.xml
+            emulator-pid.txt
+            emulator-screen.png
+            emulator-logcat.txt
+            emulator-result.txt
+          if-no-files-found: warn
+          retention-days: 7
