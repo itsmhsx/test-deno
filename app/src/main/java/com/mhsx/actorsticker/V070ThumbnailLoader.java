@@ -21,4 +21,6 @@ final class V070ThumbnailLoader {
         if(view==null||file==null||!file.isFile())return;String key=file.getAbsolutePath()+"@"+targetPx;Bitmap hit=cache.get(key);if(hit!=null&&!hit.isRecycled()){view.setImageBitmap(hit);return;}
         pool.execute(()->{try{BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(file.getAbsolutePath(),o);int s=1;while(o.outWidth/s>targetPx*2||o.outHeight/s>targetPx*2)s*=2;BitmapFactory.Options d=new BitmapFactory.Options();d.inSampleSize=Math.max(1,s);d.inPreferredConfig=Bitmap.Config.RGB_565;Bitmap b=BitmapFactory.decodeFile(file.getAbsolutePath(),d);if(b==null)return;cache.put(key,b);view.post(()->{if(view.isAttachedToWindow())view.setImageBitmap(b);});}catch(Throwable ignored){}});
     }
+    static void trimMemory(int level){try{if(level>=80)cache.evictAll();else if(level>=40)cache.trimToSize(4*1024);else cache.trimToSize(8*1024);}catch(Throwable ignored){}}
+    static void clear(){try{cache.evictAll();}catch(Throwable ignored){}}
 }
