@@ -7,14 +7,14 @@ import android.media.MediaCodecList;
 import android.net.Uri;
 import android.os.Build;
 
-import androidx.media3.common.Composition;
 import androidx.media3.common.Effect;
-import androidx.media3.common.Effects;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.effect.Presentation;
+import androidx.media3.transformer.Composition;
 import androidx.media3.transformer.EditedMediaItem;
+import androidx.media3.transformer.Effects;
 import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
 import androidx.media3.transformer.Transformer;
